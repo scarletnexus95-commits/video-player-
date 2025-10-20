@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Enhanced Video Player + Library</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary: #e91e63;
+      --primary-dark: #c2185b;
+      --secondary: #03a9f4;
+      --dark-bg: #121212;
+      --dark-surface: #1e1e1e;
+      --dark-card: #252525;
+      --text-primary: #ffffff;
+      --text-secondary: rgba(255, 255, 255, 0.7);
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+      --border-radius: 4px;
+      --transition: all 0.3s ease;
+    }
+
+    body {
+      background: var(--dark-bg);
+      color: var(--text-primary);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: var(--spacing-md);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .hidden { display: none; }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* Player & Controls */
+    #playerUI { 
+      width: 100%; 
+      max-width: 900px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      background: var(--dark-surface);
+    }
+
+    .video-container {
+      position: relative;
+      background: #000;
+      overflow: hidden;
+      aspect-ratio: 16/9;
+    }
+
+    video { 
+      width: 100%; 
+      height: 100%;
+      display: block;
+      object-fit: contain;
+    }
+
+    .controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+      display: flex;
+      flex-direction: column;
+      padding: var(--spacing-sm);
+      opacity: 0;
+      transition: var(--transition);
+      transform: translateY(100%);
+    }
+
+    .video-container:hover .controls,
+    .video-container:focus-within .controls,
+    .controls.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .progress-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      margin-bottom: var(--spacing-sm);
+      cursor: pointer;
+      position: relative;
+      border-radius: 3px;
+    }
+
+    .progress {
+      background: var(--primary);
+      width: 0;
+      height: 100%;
+      border-radius: 3px;
+      position: relative;
+      transition: width 0.1s ease;
+    }
+
+    .progress-handle {
+      position: absolute;
+      right: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--primary);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .progress-container:hover .progress-handle {
+      opacity: 1;
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+
+    .btn {
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 18px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    .btn.pip-active,
+    .btn.autoplay-active,
+    .btn.muted-active,
+    .btn.auto-next-active {
+      color: var(--primary);
+    }
+
+    .btn.mini {
+      width: 28px;
+      height: 28px;
+      font-size: 14px;
+    }
+
+    .btn.expand {
+      width: auto;
+      height: auto;
+      padding: 4px 8px;
+      font-size: 14px;
+      border-radius: var(--border-radius);
+    }
+
+    input[type=range] {
+      width: 80px;
+      cursor: pointer;
+      accent-color: var(--primary);
+      background: transparent;
+    }
+
+    .volume-container {
+      display: flex;
+      align-items: center;
+      margin: 0 var(--spacing-sm);
+    }
+
+    #time {
+      font-size: 14px;
+      margin: 0 var(--spacing-sm);
+      min-width: 120px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .spacer {
+      flex: 1;
+    }
+
+    .playback-speed {
+      position: relative;
+      margin-right: var(--spacing-sm);
+    }
+
+    .speed-btn {
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      padding: 4px 8px;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .speed-menu {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      background: var(--dark-card);
+      border-radius: var(--border-radius);
+      padding: var(--spacing-xs);
+      display: none;
+      flex-direction: column;
+      min-width: 80px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+    }
+
+    .playback-speed:hover .speed-menu {
+      display: flex;
+    }
+
+    .speed-option {
+      padding: var(--spacing-xs) var(--spacing-sm);
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .speed-option:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .speed-option.active {
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    /* Toast notifications */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--dark-card);
+      color: var(--text-primary);
+      padding: var(--spacing-sm) var(--spacing-md);
+      border-radius: var(--border-radius);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    .toast.visible {
+      opacity: 1;
+    }
+
+    /* Current Series Section */
+    .current-series {
+      margin-top: var(--spacing-xl);
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .current-series h3 {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: var(--spacing-sm);
+      margin-bottom: var(--spacing-md);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .current-series ul {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: var(--spacing-md);
+    }
+
+    .current-series li {
+      background: var(--dark-card);
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .current-series li:hover { 
+      transform: translateY(-4px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .current-series img {
+      width: 100%;
+      height: 84px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .current-series span {
+      font-size: 12px;
+      padding: var(--spacing-sm);
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .current-series .active-episode {
+      border: 2px solid var(--primary);
+    }
+
+    /* Recently Watched */
+    .recently-watched {
+      margin-top: var(--spacing-xl);
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .recently-watched h3 {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: var(--spacing-sm);
+      margin-bottom: var(--spacing-md);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .section-actions {
+      display: flex;
+      gap: var(--spacing-xs);
+    }
+
+    .recently-watched ul {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: var(--spacing-md);
+    }
+
+    .recently-watched li {
+      background: var(--dark-card);
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .recently-watched li:hover { 
+      transform: translateY(-4px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .recently-watched img {
+      width: 100%;
+      height: 84px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .recently-watched span {
+      font-size: 12px;
+      padding: var(--spacing-sm);
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .remove-recent {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: rgba(0, 0, 0, 0.7);
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      cursor: pointer;
+      opacity: 0;
+      transition: var(--transition);
+    }
+
+    .recently-watched li:hover .remove-recent {
+      opacity: 1;
+    }
+
+    /* Library Screen */
+    #libraryScreen { 
+      width: 100%; 
+      max-width: 900px;
+      background: var(--dark-surface);
+      border-radius: var(--border-radius);
+      padding: var(--spacing-md);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    #libraryScreen h3 {
+      font-size: 20px;
+      margin-bottom: var(--spacing-md);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: var(--spacing-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #addFolder {
+      margin-bottom: var(--spacing-md);
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: var(--spacing-sm) var(--spacing-md);
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    #addFolder:hover {
+      background: var(--primary-dark);
+    }
+
+    #libraryList {
+      list-style: none;
+    }
+
+    #libraryList > li {
+      padding: var(--spacing-sm);
+      background: var(--dark-card);
+      margin-bottom: var(--spacing-xs);
+      border-radius: var(--border-radius);
+      transition: var(--transition);
+    }
+
+    #libraryList > li:hover { 
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .library-item.collapsed > ul {
+      display: none;
+    }
+
+    .library-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-xs);
+    }
+
+    .episode-list {
+      list-style: none;
+      padding-left: var(--spacing-lg);
+      margin-top: var(--spacing-xs);
+    }
+
+    .episode-list li {
+      padding: var(--spacing-xs) var(--spacing-sm);
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .episode-list li:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Enhanced episode info */
+    .episode-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .episode-title {
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .episode-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      gap: var(--spacing-sm);
+    }
+
+    .episode-number {
+      color: var(--primary);
+    }
+
+    /* Loading indicator */
+    .loader {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: var(--primary);
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Empty states */
+    .empty-state {
+      text-align: center;
+      padding: var(--spacing-xl);
+      color: var(--text-secondary);
+    }
+
+    /* Auto-next toggle indicator */
+    .auto-next-indicator {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: var(--primary);
+      padding: 4px 8px;
+      border-radius: var(--border-radius);
+      font-size: 12px;
+      font-weight: bold;
+      z-index: 5;
+      display: none;
+    }
+
+    .auto-next-indicator.visible {
+      display: block;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      body {
+        padding: var(--spacing-xs);
+      }
+      
+      .current-series ul,
+      .recently-watched ul {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      }
+      
+      .controls-row {
+        flex-wrap: wrap;
+      }
+      
+      .spacer {
+        order: 1;
+        width: 100%;
+        height: var(--spacing-xs);
+      }
+    }
+
+    /* Off-screen helpers */
+    #fileInput, #importFileInput, #thumbCanvas { display: none; }
+  </style>
+</head>
+<body>
+  <!-- Toast notification -->
+  <div id="toast" class="toast"></div>
+
+  <!-- PLAYER UI -->
+  <div id="playerUI" class="fade-in">
+    <div class="video-container" tabindex="0">
+      <video id="video" src="" preload="metadata"></video>
+      <div class="auto-next-indicator" id="autoNextIndicator">Auto-next: ON</div>
+      <div class="controls">
+        <div class="progress-container">
+          <div id="progress" class="progress">
+            <div class="progress-handle"></div>
+          </div>
+        </div>
+        <div class="controls-row">
+          <button id="playPause" class="btn" aria-label="Play/Pause">►</button>
+          <span id="time">00:00 / 00:00</span>
+          
+          <div class="volume-container">
+            <button id="muteToggle" class="btn" aria-label="Mute/Unmute">🔊</button>
+            <input id="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume"/>
+          </div>
+          
+          <div class="playback-speed">
+            <button class="speed-btn">1x</button>
+            <div class="speed-menu">
+              <div class="speed-option" data-speed="0.5">0.5x</div>
+              <div class="speed-option" data-speed="0.75">0.75x</div>
+              <div class="speed-option active" data-speed="1">1x</div>
+              <div class="speed-option" data-speed="1.25">1.25x</div>
+              <div class="speed-option" data-speed="1.5">1.5x</div>
+              <div class="speed-option" data-speed="2">2x</div>
+            </div>
+          </div>
+          
+          <div class="spacer"></div>
+          
+          <button id="toggleAutoNext" class="btn auto-next-active" title="Auto-next Episode">⏭️</button>
+          <button id="toggleLibrary" class="btn" title="Toggle Library">📚</button>
+          <button id="chooseVideo" class="btn" title="Choose Video">📂</button>
+          <button id="pipButton" class="btn hidden" title="Picture-in-Picture">🗗</button>
+          <button id="fullScreen" class="btn" title="Fullscreen">⤢</button>
+          <input type="file" id="fileInput" accept="video/*" aria-label="Select video file"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Series Section - New! -->
+    <div id="currentSeries" class="current-series hidden">
+      <h3>
+        <span id="currentSeriesTitle">Current Series</span>
+        <button id="closeSeries" class="btn mini" title="Close Series View">✕</button>
+      </h3>
+      <ul id="seriesEpisodesList"></ul>
+    </div>
+
+    <div class="recently-watched">
+      <h3>
+        Recently Watched
+        <div class="section-actions">
+          <button id="exportRecent" class="btn mini" title="Export">💾</button>
+          <button id="importRecent" class="btn mini" title="Import">📥</button>
+          <button id="clearRecent" class="btn mini" title="Clear">🗑️</button>
+        </div>
+      </h3>
+      <input type="file" id="importFileInput" accept=".json,.csv" class="hidden"/>
+      <ul id="recentList">
+        <li class="empty-state">No recently watched videos</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- LIBRARY SCREEN -->
+  <div id="libraryScreen" class="hidden">
+    <h3>
+      Video Library
+      <button id="closeLibrary" class="btn mini" title="Close Library">✕</button>
+    </h3>
+    <button id="addFolder" class="btn">Add Folder</button>
+    <ul id="libraryList">
+      <li class="empty-state">No library content. Add a folder to get started.</li>
+    </ul>
+  </div>
+
+  <!-- Off-screen canvas for thumbnails -->
+  <canvas id="thumbCanvas" width="160" height="90"></canvas>
+
+  <script>
+    // --- Element Refs ---
+    const playerUI         = document.getElementById('playerUI');
+    const libraryScreen    = document.getElementById('libraryScreen');
+    const toggleLibrary    = document.getElementById('toggleLibrary');
+    const closeLibrary     = document.getElementById('closeLibrary');
+    const addFolder        = document.getElementById('addFolder');
+    const libraryList      = document.getElementById('libraryList');
+
+    const video            = document.getElementById('video');
+    const playPause        = document.getElementById('playPause');
+    const progress         = document.getElementById('progress');
+    const progressBar      = document.querySelector('.progress-container');
+    const timeDisplay      = document.getElementById('time');
+    const volume           = document.getElementById('volume');
+    const muteToggle       = document.getElementById('muteToggle');
+    const fullScreen       = document.getElementById('fullScreen');
+    const pipButton        = document.getElementById('pipButton');
+    const toggleAutoNext   = document.getElementById('toggleAutoNext');
+    const chooseVideo      = document.getElementById('chooseVideo');
+    const fileInput        = document.getElementById('fileInput');
+    const autoNextIndicator = document.getElementById('autoNextIndicator');
+
+    const recentList       = document.getElementById('recentList');
+    const exportBtn        = document.getElementById('exportRecent');
+    const importBtn        = document.getElementById('importRecent');
+    const clearBtn         = document.getElementById('clearRecent');
+    const importFileInput  = document.getElementById('importFileInput');
+    
+    const toast            = document.getElementById('toast');
+    const speedOptions     = document.querySelectorAll('.speed-option');
+    const speedBtn         = document.querySelector('.speed-btn');
+    
+    // New elements for series display
+    const currentSeriesSection = document.getElementById('currentSeries');
+    const currentSeriesTitle = document.getElementById('currentSeriesTitle');
+    const seriesEpisodesList = document.getElementById('seriesEpisodesList');
+    const closeSeriesBtn = document.getElementById('closeSeries');
+
+    const canvas           = document.getElementById('thumbCanvas');
+    const ctx              = canvas.getContext('2d');
+
+    const STORAGE_RECENT   = 'recentVideos';
+    const STORAGE_SETTINGS = 'playerSettings';
+    const MAX_RECENT       = 12;
+
+    // Playback & playlist state
+    let autoplayEnabled      = true;
+    let autoNextEnabled      = true; // New: auto-next episode feature
+    let currentPlaylist      = [];
+    let currentPlaylistIndex = 0;
+    let isScanning           = false;
+    let currentSeriesData    = null; // Store current series info
+    let autoNextTimeout      = null; // For auto-next countdown
+
+    // --- Enhanced Episode Parsing ---
+    function parseEpisodeInfo(filename) {
+      const patterns = [
+        // S01E02, S01E02, S01E02 - Title
+        /s(\d+)\s*e(\d+)/i,
+        // Season 1 Episode 2, Season 01 Episode 02
+        /season\s*(\d+)\s*episode\s*(\d+)/i,
+        // 1x02, 01x02
+        /(\d+)x(\d+)/i,
+        // Episode 2, EP 02, Ep. 2
+        /episode\s*(\d+)|ep\s*(\d+)|ep\.\s*(\d+)/i,
+        // Just numbers at the beginning
+        /^(\d+)\D/
+      ];
+
+      for (const pattern of patterns) {
+        const match = filename.match(pattern);
+        if (match) {
+          let season, episode;
+          
+          if (pattern === patterns[0] || pattern === patterns[1] || pattern === patterns[2]) {
+            // S01E02 or Season 1 Episode 2 or 1x02 patterns
+            season = parseInt(match[1]);
+            episode = parseInt(match[2]);
+          } else if (pattern === patterns[3]) {
+            // Episode only patterns
+            season = 1;
+            episode = parseInt(match[1] || match[2] || match[3]);
+          } else if (pattern === patterns[4]) {
+            // Number at beginning
+            season = 1;
+            episode = parseInt(match[1]);
+          }
+          
+          if (season && episode) {
+            // Extract title by removing the episode pattern and common extensions
+            let title = filename
+              .replace(pattern, '')
+              .replace(/[._-]/g, ' ')
+              .replace(/\.(mp4|mkv|avi|mov|wmv|flv|webm)$/i, '')
+              .trim();
+            
+            // Clean up title
+            title = title.replace(/^\s*[-\s]*\s*/, '').trim();
+            if (!title) title = `Episode ${episode}`;
+            
+            return {
+              season,
+              episode,
+              title,
+              displayTitle: `S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')} - ${title}`,
+              sortKey: season * 1000 + episode // For proper sorting
+            };
+          }
+        }
+      }
+      
+      // Fallback: use filename as title
+      const cleanName = filename.replace(/\.(mp4|mkv|avi|mov|wmv|flv|webm)$/i, '').trim();
+      return {
+        season: 1,
+        episode: 0,
+        title: cleanName,
+        displayTitle: cleanName,
+        sortKey: 0
+      };
+    }
+
+    function sortEpisodes(episodes) {
+      return episodes.sort((a, b) => {
+        // First try to sort by parsed episode info
+        const aInfo = parseEpisodeInfo(a.name);
+        const bInfo = parseEpisodeInfo(b.name);
+        
+        if (aInfo.sortKey !== bInfo.sortKey) {
+          return aInfo.sortKey - bInfo.sortKey;
+        }
+        
+        // Fallback to natural string sort
+        return a.name.localeCompare(b.name, undefined, { numeric: true });
+      });
+    }
+
+    // Utility: format MM:SS
+    function formatTime(sec) {
+      if (isNaN(sec)) return '00:00 / 00:00';
+      const m = String(Math.floor(sec/60)).padStart(2,'0');
+      const s = String(Math.floor(sec%60)).padStart(2,'0');
+      return `${m}:${s}`;
+    }
+
+    // Show toast notification
+    function showToast(message, duration = 3000) {
+      toast.textContent = message;
+      toast.classList.add('visible');
+      
+      setTimeout(() => {
+        toast.classList.remove('visible');
+      }, duration);
+    }
+
+    // Load settings from localStorage
+    function loadSettings() {
+      const settings = JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || '{}');
+      autoplayEnabled = settings.autoplay !== undefined ? settings.autoplay : true;
+      autoNextEnabled = settings.autoNext !== undefined ? settings.autoNext : true;
+      video.volume = settings.volume !== undefined ? settings.volume : 1;
+      video.playbackRate = settings.playbackRate !== undefined ? settings.playbackRate : 1;
+      volume.value = video.volume;
+      
+      // Update UI to reflect settings
+      toggleAutoNext.classList.toggle('auto-next-active', autoNextEnabled);
+      muteToggle.classList.toggle('muted-active', video.muted);
+      speedBtn.textContent = `${video.playbackRate}x`;
+      
+      // Mark active speed option
+      speedOptions.forEach(option => {
+        option.classList.toggle('active', parseFloat(option.dataset.speed) === video.playbackRate);
+      });
+    }
+
+    // Save settings to localStorage
+    function saveSettings() {
+      const settings = {
+        autoplay: autoplayEnabled,
+        autoNext: autoNextEnabled,
+        volume: video.volume,
+        playbackRate: video.playbackRate
+      };
+      localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(settings));
+    }
+
+    // --- Auto-next Episode Functionality ---
+    function toggleAutoNextEpisode() {
+      autoNextEnabled = !autoNextEnabled;
+      toggleAutoNext.classList.toggle('auto-next-active', autoNextEnabled);
+      saveSettings();
+      
+      if (autoNextEnabled) {
+        showToast('Auto-next episode enabled');
+      } else {
+        showToast('Auto-next episode disabled');
+        // Clear any existing countdown
+        if (autoNextTimeout) {
+          clearTimeout(autoNextTimeout);
+          autoNextTimeout = null;
+        }
+        hideAutoNextIndicator();
+      }
+    }
+
+    function showAutoNextIndicator(countdown = 5) {
+      if (!autoNextEnabled || !currentPlaylist || currentPlaylistIndex >= currentPlaylist.length - 1) {
+        return;
+      }
+      
+      autoNextIndicator.textContent = `Next episode in: ${countdown}s`;
+      autoNextIndicator.classList.add('visible');
+      
+      // Update countdown every second
+      if (countdown > 0) {
+        autoNextTimeout = setTimeout(() => {
+          showAutoNextIndicator(countdown - 1);
+        }, 1000);
+      } else {
+        // Time's up, play next episode
+        playNextEpisode();
+      }
+    }
+
+    function hideAutoNextIndicator() {
+      autoNextIndicator.classList.remove('visible');
+      if (autoNextTimeout) {
+        clearTimeout(autoNextTimeout);
+        autoNextTimeout = null;
+      }
+    }
+
+    function playNextEpisode() {
+      if (autoNextEnabled && currentPlaylist && currentPlaylistIndex < currentPlaylist.length - 1) {
+        currentPlaylistIndex++;
+        _playHandle(currentPlaylist[currentPlaylistIndex]);
+      }
+    }
+
+    // --- PLAYER CONTROLS ---
+    function togglePlay() {
+      try {
+        if (video.paused) {
+          video.play().then(() => {
+            playPause.textContent = '❚❚';
+            playPause.setAttribute('aria-label', 'Pause');
+          }).catch(err => {
+            showToast('Playback failed: ' + err.message);
+          });
+        } else {
+          video.pause();
+          playPause.textContent = '►';
+          playPause.setAttribute('aria-label', 'Play');
+        }
+      } catch (err) {
+        showToast('Playback error: ' + err.message);
+      }
+    }
+
+    function updateProgress() {
+      if (!video.duration || isNaN(video.duration)) return;
+      const pct = video.currentTime / video.duration * 100;
+      progress.style.width = pct + '%';
+      timeDisplay.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+      
+      // Show auto-next indicator when near the end (last 10 seconds)
+      if (autoNextEnabled && currentPlaylist && currentPlaylist.length > 1 && 
+          video.duration - video.currentTime <= 10 && video.duration - video.currentTime > 0) {
+        const remaining = Math.ceil(video.duration - video.currentTime);
+        if (remaining <= 5 && !autoNextTimeout) {
+          showAutoNextIndicator(remaining);
+        }
+      }
+    }
+
+    function setProgress(e) {
+      const rect = progressBar.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      video.currentTime = pos * video.duration;
+    }
+
+    function toggleFullScreen() {
+      try {
+        if (!document.fullscreenElement) {
+          video.parentElement.requestFullscreen().catch(err => {
+            showToast('Fullscreen error: ' + err.message);
+          });
+        } else {
+          document.exitFullscreen();
+        }
+      } catch (err) {
+        showToast('Fullscreen not supported: ' + err.message);
+      }
+    }
+
+    function toggleMute() {
+      video.muted = !video.muted;
+      muteToggle.classList.toggle('muted-active', video.muted);
+      muteToggle.textContent = video.muted ? '🔇' : '🔊';
+      saveSettings();
+    }
+
+    function changePlaybackRate(rate) {
+      video.playbackRate = rate;
+      speedBtn.textContent = `${rate}x`;
+      saveSettings();
+      
+      // Update active class
+      speedOptions.forEach(option => {
+        option.classList.toggle('active', parseFloat(option.dataset.speed) === rate);
+      });
+      
+      showToast(`Playback speed: ${rate}x`);
+    }
+
+    // --- RECENTLY WATCHED ---
+    function loadRecent() {
+      return JSON.parse(localStorage.getItem(STORAGE_RECENT) || '[]');
+    }
+
+    function saveRecent(arr) {
+      localStorage.setItem(STORAGE_RECENT, JSON.stringify(arr));
+    }
+
+    function renderRecent() {
+      const recentItems = loadRecent();
+      recentList.innerHTML = '';
+      
+      if (recentItems.length === 0) {
+        recentList.innerHTML = '<li class="empty-state">No recently watched videos</li>';
+        return;
+      }
+      
+      recentItems.forEach((item, index) => {
+        const li  = document.createElement('li');
+        
+        const img = document.createElement('img');
+        img.src   = item.thumbnail;
+        img.alt   = item.title;
+        
+        const sp  = document.createElement('span');
+        sp.textContent = item.title;
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove-recent';
+        removeBtn.innerHTML = '×';
+        removeBtn.title = 'Remove from history';
+        removeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeFromRecent(index);
+        });
+        
+        li.append(img, sp, removeBtn);
+        li.onclick = () => {
+          video.src = item.src;
+          video.load();
+          video.play().catch(err => {
+            showToast('Cannot play video: ' + err.message);
+          });
+          hideSeriesEpisodes();
+        };
+        recentList.append(li);
+      });
+    }
+
+    function addToRecent(item) {
+      let list = loadRecent().filter(i => i.src !== item.src);
+      list.unshift(item);
+      if (list.length > MAX_RECENT) list = list.slice(0, MAX_RECENT);
+      saveRecent(list);
+      renderRecent();
+    }
+    
+    function removeFromRecent(index) {
+      const list = loadRecent();
+      list.splice(index, 1);
+      saveRecent(list);
+      renderRecent();
+      showToast('Removed from history');
+    }
+
+    clearBtn.addEventListener('click', () => {
+      if (!loadRecent().length) return showToast('No history to clear.');
+      if (confirm('Clear all recently watched videos?')) {
+        localStorage.removeItem(STORAGE_RECENT);
+        renderRecent();
+        showToast('History cleared');
+      }
+    });
+
+    // --- GENERATE THUMBNAIL ---
+    async function generateThumbnail(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const tmp = document.createElement('video');
+        tmp.src = url; 
+        tmp.muted = true; 
+        tmp.playsInline = true;
+        tmp.crossOrigin = 'anonymous';
+        
+        tmp.addEventListener('loadedmetadata', () => {
+          tmp.currentTime = Math.min(2, tmp.duration/2);
+        });
+        
+        tmp.addEventListener('seeked', () => {
+          try {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+            
+            canvas.toBlob(blob => {
+              const reader = new FileReader();
+              reader.onload  = () => { 
+                URL.revokeObjectURL(url); 
+                resolve(reader.result); 
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            }, 'image/jpeg', 0.8);
+          } catch (err) {
+            URL.revokeObjectURL(url);
+            reject(err);
+          }
+        });
+        
+        tmp.addEventListener('error', () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('Failed to load video for thumbnail'));
+        });
+        
+        // Fallback in case seeked doesn't fire
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+          reject(new Error('Thumbnail generation timeout'));
+        }, 5000);
+      });
+    }
+
+    // --- SERIES EPISODES DISPLAY ---
+    function showSeriesEpisodes(seriesData, currentEpisodeHandle = null) {
+      currentSeriesData = seriesData;
+      currentSeriesTitle.textContent = seriesData.name;
+      
+      // Flatten all episodes from all seasons
+      const allEpisodes = Object.keys(seriesData.seasons)
+        .sort((a, b) => a - b)
+        .flatMap(seasonNum => seriesData.seasons[seasonNum]);
+      
+      seriesEpisodesList.innerHTML = '';
+      
+      if (allEpisodes.length === 0) {
+        seriesEpisodesList.innerHTML = '<li class="empty-state">No episodes found</li>';
+        return;
+      }
+      
+      allEpisodes.forEach((episodeHandle, index) => {
+        const li = document.createElement('li');
+        const episodeInfo = parseEpisodeInfo(episodeHandle.name);
+        
+        // Create a thumbnail if we don't have one
+        const img = document.createElement('img');
+        img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgOTAiIHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiMzMzMiLz48cGF0aCBkPSJNNjQgNDJ2MjRsMTYtMTJsMTYgMTJ2LTI0eiIgZmlsbD0iIzk5OSIvPjx0ZXh0IHg9IjUwJSIgeT0iODAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjEwIj5FcGlzb2RlICcgKyAoaW5kZXggKyAxKSArICc8L3RleHQ+PC9zdmc+';
+        img.alt = episodeInfo.displayTitle;
+        
+        // Try to generate a thumbnail in the background
+        episodeHandle.getFile().then(file => {
+          generateThumbnail(file).then(thumb => {
+            img.src = thumb;
+          }).catch(() => {
+            // Keep the fallback image if thumbnail generation fails
+          });
+        }).catch(() => {
+          // Couldn't get the file, keep fallback
+        });
+        
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'episode-info';
+        
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'episode-title';
+        titleSpan.textContent = episodeInfo.displayTitle;
+        
+        const metaSpan = document.createElement('span');
+        metaSpan.className = 'episode-meta';
+        metaSpan.innerHTML = `<span class="episode-number">S${episodeInfo.season.toString().padStart(2, '0')}E${episodeInfo.episode.toString().padStart(2, '0')}</span>`;
+        
+        infoDiv.append(titleSpan, metaSpan);
+        li.append(img, infoDiv);
+        
+        // Highlight the current episode if provided
+        if (currentEpisodeHandle && episodeHandle.name === currentEpisodeHandle.name) {
+          li.classList.add('active-episode');
+        }
+        
+        li.onclick = () => {
+          // Play this specific episode
+          currentPlaylist = allEpisodes;
+          currentPlaylistIndex = index;
+          _playHandle(episodeHandle);
+        };
+        
+        seriesEpisodesList.append(li);
+      });
+      
+      // Show the series section
+      currentSeriesSection.classList.remove('hidden');
+    }
+    
+    function hideSeriesEpisodes() {
+      currentSeriesSection.classList.add('hidden');
+      currentSeriesData = null;
+    }
+    
+    closeSeriesBtn.addEventListener('click', hideSeriesEpisodes);
+
+    // --- PLAYLIST ENGINE ---
+    async function _playHandle(handle) {
+      try {
+        const file = await handle.getFile();
+        const url  = URL.createObjectURL(file);
+        video.src  = url;
+        video.load();
+        
+        // Show loading state
+        playPause.innerHTML = '<span class="loader"></span>';
+        
+        video.play().then(() => {
+          playPause.textContent = '❚❚';
+          playPause.setAttribute('aria-label', 'Pause');
+        }).catch(err => {
+          playPause.textContent = '►';
+          playPause.setAttribute('aria-label', 'Play');
+          showToast('Playback failed: ' + err.message);
+        });
+        
+        let thumb;
+        try { 
+          thumb = await generateThumbnail(file); 
+        } catch { 
+          // Fallback thumbnail
+          thumb = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgOTAiIHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiMzMzMiLz48cGF0aCBkPSJNNjQgNDJ2MjRsMTYtMTJsMTYgMTJ2LTI0eiIgZmlsbD0iIzk5OSIvPjx0ZXh0IHg9IjUwJSIgeT0iODAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjEwIj5WaWRlbzwvdGV4dD48L3N2Zz4=';
+        }
+        
+        addToRecent({ src: url, title: handle.name, thumbnail: thumb });
+        
+        // If this is part of a series, show the series episodes
+        if (currentSeriesData) {
+          showSeriesEpisodes(currentSeriesData, handle);
+        }
+        
+        // Hide auto-next indicator when starting a new video
+        hideAutoNextIndicator();
+      } catch (err) {
+        showToast('Error loading video: ' + err.message);
+      }
+    }
+
+    function playPlaylist(handles, seriesData = null) {
+      if (!handles.length) return;
+      currentPlaylist      = handles;
+      currentPlaylistIndex = 0;
+      
+      // Store series data if provided
+      if (seriesData) {
+        currentSeriesData = seriesData;
+        showSeriesEpisodes(seriesData, handles[0]);
+      } else {
+        hideSeriesEpisodes();
+      }
+      
+      _playHandle(currentPlaylist[0]);
+      playerUI.classList.remove('hidden');
+      libraryScreen.classList.add('hidden');
+    }
+
+    video.addEventListener('ended', () => {
+      if (autoNextEnabled && currentPlaylist && currentPlaylistIndex < currentPlaylist.length - 1) {
+        // Use auto-next with countdown
+        showAutoNextIndicator(5);
+      } else if (autoplayEnabled && currentPlaylist && currentPlaylistIndex < currentPlaylist.length - 1) {
+        // Legacy autoplay behavior (immediate)
+        currentPlaylistIndex++;
+        _playHandle(currentPlaylist[currentPlaylistIndex]);
+      }
+    });
+
+    // --- LIBRARY BUILD & RENDER ---
+    function isVideoFile(name) {
+      return /\.(mp4|mkv|webm|ogg|mov|avi|m4v|flv|wmv)$/i.test(name);
+    }
+
+    async function buildLibrary(rootHandle) {
+      const movies = [];
+      const series = [];
+
+      for await (const [name, handle] of rootHandle.entries()) {
+        if (handle.kind === 'file' && isVideoFile(name)) {
+          movies.push(handle);
+        } else if (handle.kind === 'directory') {
+          const seasons = {};
+          let hasSeasons = false;
+
+          for await (const [childName, childHandle] of handle.entries()) {
+            const m = childName.match(/^s(\d+)/i) || childName.match(/^ss(\d+)/i) || childName.match(/^season[\s_-]?(\d+)/i);
+            if (childHandle.kind === 'directory' && m) {
+              hasSeasons = true;
+              const sNum = parseInt(m[1], 10);
+              seasons[sNum] = [];
+              for await (const [epName, epHandle] of childHandle.entries()) {
+                if (epHandle.kind==='file' && isVideoFile(epName)) {
+                  seasons[sNum].push(epHandle);
+                }
+              }
+              // Use enhanced episode sorting
+              seasons[sNum] = sortEpisodes(seasons[sNum]);
+            }
+          }
+
+          if (!hasSeasons) {
+            seasons[1] = [];
+            for await (const [childName, childHandle] of handle.entries()) {
+              if (childHandle.kind==='file' && isVideoFile(childName)) {
+                seasons[1].push(childHandle);
+              }
+            }
+            // Use enhanced episode sorting for flat structure too
+            seasons[1] = sortEpisodes(seasons[1]);
+          }
+
+          // Remove empty seasons
+          Object.keys(seasons).forEach(seasonNum => {
+            if (seasons[seasonNum].length === 0) {
+              delete seasons[seasonNum];
+            }
+          });
+
+          if (Object.keys(seasons).length > 0) {
+            series.push({ name, seasons, handle });
+          }
+        }
+      }
+
+      movies.sort((a,b)=>
+        a.name.localeCompare(b.name, undefined, { numeric: true })
+      );
+      series.sort((a,b)=>
+        a.name.localeCompare(b.name, undefined, { numeric: true })
+      );
+
+      return { movies, series };
+    }
+
+    async function addFolderAndScan() {
+      try {
+        if (isScanning) {
+          showToast('Already scanning a folder');
+          return;
+        }
+        
+        isScanning = true;
+        addFolder.innerHTML = '<span class="loader"></span> Scanning...';
+        addFolder.disabled = true;
+        
+        const rootHandle = await window.showDirectoryPicker();
+        const { movies, series } = await buildLibrary(rootHandle);
+        
+        renderLibrary(movies, series);
+        showToast(`Library updated: ${movies.length} movies, ${series.length} series`);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error('Folder scan error:', err);
+          showToast('Failed to scan folder: ' + err.message);
+        }
+      } finally {
+        isScanning = false;
+        addFolder.textContent = 'Add Folder';
+        addFolder.disabled = false;
+      }
+    }
+
+    function renderLibrary(movies, series) {
+      libraryList.innerHTML = '';
+
+      if (movies.length === 0 && series.length === 0) {
+        libraryList.innerHTML = '<li class="empty-state">No media found in the selected folder</li>';
+        return;
+      }
+
+      // Movies
+      if (movies.length) {
+        const header = document.createElement('li');
+        header.textContent = `Movies (${movies.length})`;
+        header.style.fontWeight = 'bold';
+        header.style.marginBottom = '8px';
+        libraryList.append(header);
+
+        movies.forEach(handle => {
+          const li = document.createElement('li');
+          li.textContent = handle.name;
+          li.style.cursor = 'pointer';
+          li.onclick = () => {
+            currentPlaylist = [];
+            hideSeriesEpisodes();
+            _playHandle(handle);
+          };
+          libraryList.append(li);
+        });
+      }
+
+      // Series
+      if (series.length) {
+        const header = document.createElement('li');
+        header.textContent = `Series (${series.length})`;
+        header.style.fontWeight = 'bold';
+        header.style.marginTop = movies.length ? '16px' : '0';
+        header.style.marginBottom = '8px';
+        libraryList.append(header);
+      }
+
+      series.forEach(serie => {
+        // flatten all episodes for series title click
+        const allEpisodes = Object.keys(serie.seasons)
+          .sort((a,b)=>a-b)
+          .flatMap(num => serie.seasons[num]);
+
+        const seriesLi = document.createElement('li');
+        seriesLi.className = 'library-item collapsed';
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'library-header';
+
+        const expandBtn = document.createElement('button');
+        expandBtn.textContent = '▸';
+        expandBtn.className = 'btn expand';
+        expandBtn.onclick = () => {
+          const collapsed = seriesLi.classList.toggle('collapsed');
+          expandBtn.textContent = collapsed ? '▸' : '▾';
+        };
+
+        const titleLabel = document.createElement('span');
+        titleLabel.textContent = serie.name;
+        titleLabel.style.fontWeight = 'bold';
+        // clicking title plays entire series and shows episodes
+        titleLabel.style.cursor = 'pointer';
+        titleLabel.title = 'Click to play full series';
+        titleLabel.onclick = () => playPlaylist(allEpisodes, serie);
+
+        const playSeriesBtn = document.createElement('button');
+        playSeriesBtn.textContent = '▶';
+        playSeriesBtn.className = 'btn mini';
+        playSeriesBtn.title = 'Play entire series';
+        playSeriesBtn.onclick = () => playPlaylist(allEpisodes, serie);
+
+        titleRow.append(expandBtn, titleLabel, playSeriesBtn);
+        seriesLi.append(titleRow);
+
+        const seasonsUl = document.createElement('ul');
+        seasonsUl.className = 'episode-list';
+
+        Object.keys(serie.seasons)
+          .sort((a,b)=>a-b)
+          .forEach(seasonNum => {
+            const seasonLi = document.createElement('li');
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.marginBottom = '4px';
+
+            const seasonLabel = document.createElement('span');
+            seasonLabel.textContent = `Season ${seasonNum} (${serie.seasons[seasonNum].length} episodes)`;
+            seasonLabel.style.fontStyle = 'italic';
+
+            // season-level play
+            const playSeasonBtn = document.createElement('button');
+            playSeasonBtn.textContent = '▶';
+            playSeasonBtn.className   = 'btn mini';
+            playSeasonBtn.title = `Play all of Season ${seasonNum}`;
+            playSeasonBtn.onclick = () => {
+              playPlaylist(serie.seasons[seasonNum], serie);
+            };
+
+            row.append(seasonLabel, playSeasonBtn);
+            seasonsUl.append(row);
+
+            // episodes with enhanced info
+            serie.seasons[seasonNum].forEach(handle => {
+              const epInfo = parseEpisodeInfo(handle.name);
+              const epLi = document.createElement('li');
+              
+              const epDiv = document.createElement('div');
+              epDiv.className = 'episode-info';
+              
+              const titleSpan = document.createElement('span');
+              titleSpan.className = 'episode-title';
+              titleSpan.textContent = epInfo.displayTitle;
+              
+              const metaSpan = document.createElement('span');
+              metaSpan.className = 'episode-meta';
+              metaSpan.innerHTML = `<span class="episode-number">S${epInfo.season.toString().padStart(2, '0')}E${epInfo.episode.toString().padStart(2, '0')}</span>`;
+              
+              epDiv.append(titleSpan, metaSpan);
+              epLi.append(epDiv);
+              
+              epLi.style.cursor = 'pointer';
+              epLi.onclick = () => {
+                currentPlaylist = [];
+                playPlaylist([handle], serie);
+              };
+              seasonsUl.append(epLi);
+            });
+          });
+
+        seriesLi.append(seasonsUl);
+        libraryList.append(seriesLi);
+      });
+    }
+
+    // --- File Picker & Controls Wiring ---
+    playPause.addEventListener('click', togglePlay);
+    video.addEventListener('click', togglePlay);
+    video.addEventListener('timeupdate', updateProgress);
+    progressBar.addEventListener('click', setProgress);
+    
+    volume.addEventListener('input', () => {
+      video.volume = volume.value;
+      video.muted = false;
+      muteToggle.classList.remove('muted-active');
+      muteToggle.textContent = '🔊';
+      saveSettings();
+    });
+    
+    muteToggle.addEventListener('click', toggleMute);
+    
+    fullScreen.addEventListener('click', toggleFullScreen);
+
+    // Auto-next toggle
+    toggleAutoNext.addEventListener('click', toggleAutoNextEpisode);
+
+    // Playback speed options
+    speedOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        changePlaybackRate(parseFloat(option.dataset.speed));
+      });
+    });
+
+    chooseVideo.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      
+      try {
+        const blobUrl = URL.createObjectURL(file);
+        video.src    = blobUrl;
+        video.load();
+        
+        // Show loading state
+        playPause.innerHTML = '<span class="loader"></span>';
+        
+        await video.play();
+        playPause.textContent = '❚❚';
+        playPause.setAttribute('aria-label', 'Pause');
+        
+        let thumb;
+        try { 
+          thumb = await generateThumbnail(file); 
+        } catch { 
+          // Fallback thumbnail
+          thumb = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgOTAiIHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiMzMzMiLz48cGF0aCBkPSJNNjQgNDJ2MjRsMTYtMTJsMTYgMTJ2LTI0eiIgZmlsbD0iIzk5OSIvPjx0ZXh0IHg9IjUwJSIgeT0iODAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjEwIj5WaWRlbzwvdGV4dD48L3N2Zz4=';
+        }
+        
+        addToRecent({ src: blobUrl, title: file.name, thumbnail: thumb });
+        hideSeriesEpisodes(); // Hide series view when playing a single file
+      } catch (err) {
+        playPause.textContent = '►';
+        playPause.setAttribute('aria-label', 'Play');
+        showToast('Error playing file: ' + err.message);
+      } finally {
+        fileInput.value = '';
+      }
+    });
+
+    video.addEventListener('play', () => {
+      const src = video.currentSrc;
+      if (!src.startsWith('blob:') && !src.startsWith('data:')) {
+        addToRecent({
+          src,
+          title: src.split('/').pop(),
+          thumbnail: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgOTAiIHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iOTAiIGZpbGw9IiMzMzMiLz48cGF0aCBkPSJNNjQgNDJ2MjRsMTYtMTJsMTYgMTJ2LTI0eiIgZmlsbD0iIzk5OSIvPjx0ZXh0IHg9IjUwJSIgeT0iODAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjEwIj5WaWRlbzwvdGV4dD48L3N2Zz4='
+        });
+      }
+    });
+
+    video.addEventListener('error', () => {
+      showToast('Error loading video');
+      playPause.textContent = '►';
+      playPause.setAttribute('aria-label', 'Play');
+    });
+
+    toggleLibrary.addEventListener('click', () => {
+      playerUI.classList.add('hidden');
+      libraryScreen.classList.remove('hidden');
+    });
+    
+    closeLibrary.addEventListener('click', () => {
+      libraryScreen.classList.add('hidden');
+      playerUI.classList.remove('hidden');
+    });
+    
+    addFolder.addEventListener('click', addFolderAndScan);
+
+    // --- Export & Import ---
+    exportBtn.addEventListener('click', () => {
+      const data = loadRecent();
+      if (data.length === 0) {
+        showToast('No history to export');
+        return;
+      }
+      
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'recently-watched.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('History exported');
+    });
+
+    importBtn.addEventListener('click', () => importFileInput.click());
+    importFileInput.addEventListener('change', async () => {
+      const file = importFileInput.files[0];
+      if (!file) return;
+      
+      try {
+        const text = await file.text();
+        let importedList = [];
+
+        if (file.name.toLowerCase().endsWith('.json')) {
+          try {
+            importedList = JSON.parse(text);
+          } catch {
+            throw new Error('Invalid JSON format');
+          }
+        } else if (file.name.toLowerCase().endsWith('.csv')) {
+          const lines = text.trim().split(/\r?\n/);
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',').map(s =>
+              s.replace(/^"|"$/g, '').replace(/""/g, '"')
+            );
+            if (cols.length >= 3) {
+              importedList.push({ title: cols[0], src: cols[1], thumbnail: cols[2] });
+            }
+          }
+        } else {
+          throw new Error('Unsupported file type');
+        }
+
+        let current = loadRecent();
+        importedList.forEach(item => {
+          if (!current.find(i => i.src === item.src)) {
+            current.unshift(item);
+          }
+        });
+
+        current = current.slice(0, MAX_RECENT);
+        saveRecent(current);
+        renderRecent();
+        importFileInput.value = '';
+        showToast(`Imported ${importedList.length} items`);
+      } catch (err) {
+        showToast('Import failed: ' + err.message);
+      }
+    });
+
+    // --- Picture-in-Picture ---
+    if ('pictureInPictureEnabled' in document) {
+      pipButton.classList.remove('hidden');
+      pipButton.addEventListener('click', async () => {
+        try {
+          if (video !== document.pictureInPictureElement) {
+            await video.requestPictureInPicture();
+          } else {
+            await document.exitPictureInPicture();
+          }
+        } catch (err) {
+          showToast('PiP error: ' + err.message);
+        }
+      });
+
+      video.addEventListener('enterpictureinpicture', () => {
+        pipButton.classList.add('pip-active');
+      });
+      video.addEventListener('leavepictureinpicture', () => {
+        pipButton.classList.remove('pip-active');
+      });
+    }
+
+    // --- Keyboard Shortcuts ---
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
+      
+      switch (e.key.toLowerCase()) {
+        case ' ':
+          if (e.target === video) {
+            // Allow space to play/pause when video is focused
+            e.preventDefault();
+            togglePlay();
+          }
+          break;
+        case 'arrowright':
+          e.preventDefault();
+          video.currentTime = Math.min(video.duration, video.currentTime + (e.shiftKey ? 15 : 5));
+          break;
+        case 'arrowleft':
+          e.preventDefault();
+          video.currentTime = Math.max(0, video.currentTime - (e.shiftKey ? 15 : 5));
+          break;
+        case 'arrowup':
+          e.preventDefault();
+          video.volume = Math.min(1, video.volume + 0.1);
+          volume.value = video.volume;
+          saveSettings();
+          break;
+        case 'arrowdown':
+          e.preventDefault();
+          video.volume = Math.max(0, video.volume - 0.1);
+          volume.value = video.volume;
+          saveSettings();
+          break;
+        case 'f':
+          e.preventDefault();
+          toggleFullScreen();
+          break;
+        case 'l':
+          e.preventDefault();
+          toggleLibrary.click();
+          break;
+        case 'm':
+          e.preventDefault();
+          toggleMute();
+          break;
+        case 'n':
+          e.preventDefault();
+          if (autoNextEnabled && currentPlaylist && currentPlaylistIndex < currentPlaylist.length - 1) {
+            playNextEpisode();
+          }
+          break;
+        case 'a':
+          e.preventDefault();
+          toggleAutoNextEpisode();
+          break;
+        case 'home':
+          e.preventDefault();
+          video.currentTime = 0;
+          break;
+        case 'end':
+          e.preventDefault();
+          video.currentTime = video.duration;
+          break;
+        case 'p':
+          e.preventDefault();
+          if ('pictureInPictureEnabled' in document) pipButton.click();
+          break;
+        case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+          e.preventDefault();
+          // Jump to percentage of video
+          const percent = parseInt(e.key) / 10;
+          video.currentTime = video.duration * percent;
+          break;
+      }
+    });
+
+    // Keep controls visible when they contain focus
+    document.addEventListener('focusin', (e) => {
+      if (e.target.closest('.controls')) {
+        document.querySelector('.controls').classList.add('visible');
+      }
+    });
+
+    // Handle fullscreen changes
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) {
+        video.parentElement.setAttribute('data-fullscreen', 'true');
+      } else {
+        video.parentElement.removeAttribute('data-fullscreen');
+      }
+    });
+
+    // --- Initialize ---
+    function init() {
+      loadSettings();
+      renderRecent();
+      
+      // Make controls visible for accessibility when tabbing
+      document.querySelector('.controls').addEventListener('focusin', function() {
+        this.classList.add('visible');
+      });
+      
+      // Check if PiP is supported
+      if ('pictureInPictureEnabled' in document) {
+        pipButton.classList.remove('hidden');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
